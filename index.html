@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>spiral</title>
+<style>
+  /* ============================================================
+     PANIC ATTACK — single page experience
+     Media slots you need to fill are marked with:  >>> INSERT
+     ============================================================ */
+
+  :root {
+    --ink: #f2f0ec;
+    --void: #060508;
+    --alarm: #ff2b2b;
+    --bruise: #3b1d4f;
+    --static: #b9b9b9;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;          /* one page, no escape by scrolling */
+    background: var(--void);
+    color: var(--ink);
+    font-family: "Courier New", Courier, monospace;
+  }
+
+  /* ---------- LAYER 0: background spiral video ---------- */
+  #spiral-video {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    z-index: 0;
+    filter: saturate(0.6) contrast(1.2);
+    /* slow zoom drift so the spiral never feels stable */
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    from { transform: scale(1) rotate(0deg); }
+    to   { transform: scale(1.15) rotate(1.5deg); }
+  }
+
+  /* ---------- LAYER 1: vignette that slowly closes in ---------- */
+  #vignette {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center,
+                transparent 35%,
+                rgba(6,5,8,0.85) 100%);
+    animation: tunnel 9s ease-in-out infinite alternate;
+  }
+  @keyframes tunnel {
+    from { background: radial-gradient(ellipse at center, transparent 45%, rgba(6,5,8,0.8) 100%); }
+    to   { background: radial-gradient(ellipse at center, transparent 18%, rgba(6,5,8,0.97) 100%); }
+  }
+
+  /* ---------- LAYER 2: heartbeat pulse over everything ---------- */
+  #pulse {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: var(--alarm);
+    opacity: 0;
+    mix-blend-mode: overlay;
+    animation: heartbeat 1.1s infinite;
+  }
+  /* lub-dub rhythm, then it speeds up via JS */
+  @keyframes heartbeat {
+    0%   { opacity: 0; }
+    8%   { opacity: 0.22; }
+    16%  { opacity: 0; }
+    28%  { opacity: 0.30; }
+    40%  { opacity: 0; }
+    100% { opacity: 0; }
+  }
+
+  /* ---------- LAYER 3: the popups ---------- */
+  .popup {
+    position: fixed;
+    z-index: 10;
+    max-width: min(42ch, 80vw);
+    padding: 14px 18px;
+    background: rgba(10, 8, 14, 0.92);
+    border: 1px solid var(--static);
+    box-shadow: 0 0 0 1px var(--void), 6px 6px 0 rgba(255, 43, 43, 0.35);
+    animation: pop-in 0.12s steps(2) both;
+    cursor: pointer;
+  }
+  .popup.urgent {
+    border-color: var(--alarm);
+    color: var(--alarm);
+    animation: pop-in 0.12s steps(2) both, jitter 0.3s steps(2) infinite;
+  }
+  .popup .titlebar {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--static);
+    border-bottom: 1px dashed rgba(185,185,185,0.4);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .popup .titlebar .x { color: var(--alarm); }
+  .popup p {
+    font-size: clamp(13px, 1.6vw, 17px);
+    line-height: 1.45;
+  }
+
+  /* image popups — these hold YOUR images */
+  .popup.img-popup { padding: 6px; }
+  .popup.img-popup img {
+    display: block;
+    width: min(34vw, 320px);
+    height: auto;
+    filter: grayscale(0.5) contrast(1.3);
+  }
+
+  @keyframes pop-in {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  @keyframes jitter {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-2px, 1px); }
+    50%  { transform: translate(2px, -1px); }
+    75%  { transform: translate(-1px, -2px); }
+    100% { transform: translate(1px, 2px); }
+  }
+
+  /* ---------- LAYER 4: giant intrusive words that flash ---------- */
+  .intrusive {
+    position: fixed;
+    z-index: 8;
+    font-size: clamp(40px, 9vw, 130px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--ink);
+    opacity: 0;
+    pointer-events: none;
+    white-space: nowrap;
+    animation: flash 2.4s ease-out forwards;
+    mix-blend-mode: difference;
+  }
+  @keyframes flash {
+    0%   { opacity: 0; transform: scale(1.3); }
+    10%  { opacity: 0.9; }
+    60%  { opacity: 0.4; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.95); }
+  }
+
+  /* ---------- screen shake applied to <body> at peak ---------- */
+  body.shaking { animation: shake 0.4s steps(2) infinite; }
+  @keyframes shake {
+    0%   { transform: translate(0,0); }
+    25%  { transform: translate(-4px, 3px); }
+    50%  { transform: translate(4px, -2px); }
+    75%  { transform: translate(-3px, -3px); }
+    100% { transform: translate(3px, 4px); }
+  }
+
+  /* ---------- accessibility: calm everything down ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    #pulse { display: none; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ===========================================================
+       >>> INSERT 1: YOUR SPIRAL VIDEO
+       Replace src below with your video file (e.g. "spiral.mp4").
+       Keep muted + autoplay + loop or browsers will block it.
+       =========================================================== -->
+  <video id="spiral-video" autoplay muted loop playsinline>
+    <source src="videos/looping.mp4" type="video/mp4">
+  </video>
+
+  <div id="vignette"></div>
+  <div id="pulse"></div>
+
+<script>
+/* =====================================================================
+   SCRIPT: launches immediately, popups accelerate to peak intensity,
+   then it stays there. No intro, no resolution — just the panic.
+   ===================================================================== */
+
+/* --- the racing thoughts. edit freely. --- */
+const THOUGHTS = [
+  "your heart is beating too fast",
+  "everyone is looking at you",
+  "WHY CAN'T YOU BREATHE",
+  "something is wrong something is wrong",
+  "WHY ARE YOU LIKE THIS.",
+  "YOU NEED TO GET OUT OF HERE",
+  "YOU'RE A FREAK",
+  "get out get out get out",
+  "WHY ARE YOU LIKE THIS.",
+  "is this a heart attack?",
+  "YOU HAVE DONE IT NOW",
+  "IT'S SO LOUD",
+  "THIS IS IT",
+  "nobody can help you",
+  "it's happening again",
+  "you should have stayed home",
+  "act normal. ACT NORMAL.",
+  "WHY ARE YOU LIKE THIS.",
+  "WHY ARE YOU LIKE THIS.",
+  "you're fine you're fine you're fine you're not",
+];
+
+/* --- single flashing giant words --- */
+const INTRUSIVE_WORDS = ["RUN", "LEAVE", "FUCK", "GET OUT", "OUT", "HELP", "FUCK"];
+
+/* =====================================================================
+   >>> INSERT 2: YOUR IMAGES
+   Add your image filenames here. They'll pop up randomly between
+   the text popups. Leave the array empty [] to disable image popups.
+   ===================================================================== */
+const IMAGES = [
+  "images/download.gif",
+  "images/ago2.jpg",
+  "images/ago3.jpg",
+];
+
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let interval = 1400;       // starting gap between popups (ms)
+const MIN_INTERVAL = 220;  // fastest gap at the peak
+const ACCEL = 0.93;        // each popup arrives 7% sooner than the last
+const PEAK_AT = 28;        // popup count where shaking starts
+const MAX_ON_SCREEN = 70;  // oldest popups recycle so the browser survives forever
+let count = 0;
+
+const rand = (min, max) => Math.random() * (max - min) + min;
+
+/* keep the DOM from growing infinitely — the layering stays dense,
+   but the oldest popups quietly disappear underneath the new ones */
+function cullOldest() {
+  const popups = document.querySelectorAll(".popup");
+  if (popups.length > MAX_ON_SCREEN) popups[0].remove();
+}
+
+function randomPosition(el) {
+  el.style.left = rand(2, 60) + "vw";
+  el.style.top  = rand(4, 70) + "vh";
+  el.style.transform = `rotate(${rand(-4, 4)}deg)`;
+}
+
+function spawnTextPopup() {
+  const div = document.createElement("div");
+  div.className = "popup" + (Math.random() < 0.3 ? " urgent" : "");
+  div.innerHTML = `
+    <div class="titlebar"><span>warning.exe</span><span class="x">✕</span></div>
+    <p>${THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)]}</p>`;
+  randomPosition(div);
+  /* clicking a popup closes it — but two more appear (whack-a-mole anxiety) */
+  div.addEventListener("click", () => {
+    div.remove();
+    spawnTextPopup();
+    spawnTextPopup();
+  });
+  document.body.appendChild(div);
+  cullOldest();
+}
+
+function spawnImagePopup() {
+  if (!IMAGES.length) return spawnTextPopup();
+  const div = document.createElement("div");
+  div.className = "popup img-popup";
+  const src = IMAGES[Math.floor(Math.random() * IMAGES.length)];
+  div.innerHTML = `
+    <div class="titlebar"><span>memory.jpg</span><span class="x">✕</span></div>
+    <img src="${src}" alt="">`;
+  randomPosition(div);
+  div.addEventListener("click", () => div.remove());
+  document.body.appendChild(div);
+  cullOldest();
+}
+
+function spawnIntrusiveWord() {
+  const span = document.createElement("div");
+  span.className = "intrusive";
+  span.textContent = INTRUSIVE_WORDS[Math.floor(Math.random() * INTRUSIVE_WORDS.length)];
+  span.style.left = rand(0, 50) + "vw";
+  span.style.top  = rand(10, 80) + "vh";
+  document.body.appendChild(span);
+  setTimeout(() => span.remove(), 2500);
+}
+
+function tick() {
+  count++;
+
+  /* mix of popup types */
+  const roll = Math.random();
+  if (roll < 0.55)      spawnTextPopup();
+  else if (roll < 0.8)  spawnImagePopup();
+  else                  spawnIntrusiveWord();
+
+  /* escalate */
+  if (count === PEAK_AT && !reducedMotion) document.body.classList.add("shaking");
+
+  /* faster heartbeat as it builds */
+  const pulse = document.getElementById("pulse");
+  pulse.style.animationDuration = Math.max(0.45, 1.1 - count * 0.015) + "s";
+
+  /* no resolution — it just keeps going at full intensity */
+  interval = Math.max(MIN_INTERVAL, interval * ACCEL);
+  setTimeout(tick, interval);
+}
+
+/* launch immediately on load — no intro, no gate */
+window.addEventListener("load", () => {
+  document.getElementById("spiral-video").play().catch(() => {});
+  if (reducedMotion) { interval = 2600; } /* gentler pacing if requested by OS */
+  tick();
+});
+</script>
+</body>
+</html>
