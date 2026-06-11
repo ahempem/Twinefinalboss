@@ -200,28 +200,25 @@
 const THOUGHTS = [
   "your heart is beating too fast",
   "everyone is looking at you",
-  "WHY CAN'T YOU BREATHE",
+  "you can't breathe properly",
   "something is wrong something is wrong",
-  "WHY ARE YOU LIKE THIS.",
-  "YOU NEED TO GET OUT OF HERE",
-  "YOU'RE A FREAK",
+  "what if it never stops",
+  "you forgot how to swallow",
   "get out get out get out",
-  "WHY ARE YOU LIKE THIS.",
   "is this a heart attack?",
-  "YOU HAVE DONE IT NOW",
-  "IT'S SO LOUD",
-  "THIS IS IT",
+  "you're going to embarrass yourself",
+  "why is the room so loud",
+  "your hands are numb",
   "nobody can help you",
   "it's happening again",
   "you should have stayed home",
   "act normal. ACT NORMAL.",
-  "WHY ARE YOU LIKE THIS.",
-  "WHY ARE YOU LIKE THIS.",
+  "the walls are too close",
   "you're fine you're fine you're fine you're not",
 ];
 
 /* --- single flashing giant words --- */
-const INTRUSIVE_WORDS = ["RUN", "LEAVE", "FUCK", "GET OUT", "OUT", "HELP", "FUCK"];
+const INTRUSIVE_WORDS = ["RUN", "BREATHE", "STOP", "NOW", "OUT", "HELP", "WHY"];
 
 /* =====================================================================
    >>> INSERT 2: YOUR IMAGES
@@ -229,10 +226,79 @@ const INTRUSIVE_WORDS = ["RUN", "LEAVE", "FUCK", "GET OUT", "OUT", "HELP", "FUCK
    the text popups. Leave the array empty [] to disable image popups.
    ===================================================================== */
 const IMAGES = [
-  "images/download.gif",
   "images/ago2.jpg",
   "images/ago3.jpg",
+  "images/download.gif"
 ];
+
+/* =====================================================================
+   >>> INSERT 3: YOUR AUDIO TRACKS
+   Each track loops forever. It begins (silently) once the popup count
+   reaches startAt, then swells toward maxVolume as the panic builds.
+   rampTicks = how many popups it takes to reach full volume.
+   Stagger startAt values so layers stack: heartbeat first, then more.
+   ===================================================================== */
+const AUDIO_TRACKS = [
+  { src: "audio/heartbeat.mp3", startAt: 0,  maxVolume: 0.9, rampTicks: 30 },
+  { src: "audio/earring.mp3",   startAt: 8,  maxVolume: 0.9, rampTicks: 40 },
+  { src: "audio/clockticking.mp3",  startAt: 16, maxVolume: 0.7, rampTicks: 35 },
+  { src: "audio/crowdyell.mp3",    startAt: 24, maxVolume: 0.6, rampTicks: 50 },
+];
+
+/* build the audio elements */
+AUDIO_TRACKS.forEach(t => {
+  t.el = new Audio(t.src);
+  t.el.loop = true;
+  t.el.volume = 0;
+  t.playing = false;
+});
+
+let audioUnlocked = false;
+
+/* =====================================================================
+   >>> INSERT 4: THE ENDING
+   CLIMAX_AT — ms until every message becomes GET OUT / GO HOME
+   CRASH_AFTER — ms of climax before the "crash"
+   RETURN_URL — where the crash dumps the player (your Twine file).
+   If this page was opened with window.open / target="_blank" from
+   Twine, it will try to close itself first; otherwise it redirects.
+   ===================================================================== */
+const CLIMAX_AT   = 30000;
+const CRASH_AFTER = 6000;
+const RETURN_URL  = "index_twine.html";   // <-- your Twine HTML file
+const CLIMAX_WORDS = ["GET OUT", "GO HOME"];
+let climaxed = false;
+let crashed = false;
+
+function startAudio() {
+  if (audioUnlocked) return;
+  /* try to start every track that's already due; if the browser blocks
+     it, the first click/keypress will unlock them instead */
+  const attempts = AUDIO_TRACKS
+    .filter(t => count >= t.startAt && !t.playing)
+    .map(t => t.el.play().then(() => { t.playing = true; }));
+  Promise.allSettled(attempts).then(results => {
+    if (results.some(r => r.status === "fulfilled")) audioUnlocked = true;
+  });
+}
+
+/* fallback: unlock all audio on the user's first interaction */
+["pointerdown", "keydown"].forEach(evt =>
+  window.addEventListener(evt, () => { audioUnlocked = true; updateAudio(true); }, { once: true })
+);
+
+function updateAudio(forcePlay = false) {
+  AUDIO_TRACKS.forEach(t => {
+    if (count < t.startAt) return;
+    /* start the track if it hasn't begun yet */
+    if (!t.playing && (audioUnlocked || forcePlay)) {
+      t.el.play().then(() => { t.playing = true; }).catch(() => {});
+    }
+    /* swell: volume climbs with the popup count, capped at maxVolume */
+    const progress = (count - t.startAt) / t.rampTicks;
+    t.el.volume = Math.min(t.maxVolume, Math.max(0, progress * t.maxVolume));
+  });
+}
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -260,10 +326,13 @@ function randomPosition(el) {
 
 function spawnTextPopup() {
   const div = document.createElement("div");
-  div.className = "popup" + (Math.random() < 0.3 ? " urgent" : "");
+  div.className = "popup" + ((climaxed || Math.random() < 0.3) ? " urgent" : "");
+  const msg = climaxed
+    ? CLIMAX_WORDS[Math.floor(Math.random() * CLIMAX_WORDS.length)]
+    : THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)];
   div.innerHTML = `
     <div class="titlebar"><span>warning.exe</span><span class="x">✕</span></div>
-    <p>${THOUGHTS[Math.floor(Math.random() * THOUGHTS.length)]}</p>`;
+    <p>${msg}</p>`;
   randomPosition(div);
   /* clicking a popup closes it — but two more appear (whack-a-mole anxiety) */
   div.addEventListener("click", () => {
@@ -292,7 +361,8 @@ function spawnImagePopup() {
 function spawnIntrusiveWord() {
   const span = document.createElement("div");
   span.className = "intrusive";
-  span.textContent = INTRUSIVE_WORDS[Math.floor(Math.random() * INTRUSIVE_WORDS.length)];
+  const pool = climaxed ? CLIMAX_WORDS : INTRUSIVE_WORDS;
+  span.textContent = pool[Math.floor(Math.random() * pool.length)];
   span.style.left = rand(0, 50) + "vw";
   span.style.top  = rand(10, 80) + "vh";
   document.body.appendChild(span);
@@ -300,6 +370,7 @@ function spawnIntrusiveWord() {
 }
 
 function tick() {
+  if (crashed) return;
   count++;
 
   /* mix of popup types */
@@ -315,16 +386,66 @@ function tick() {
   const pulse = document.getElementById("pulse");
   pulse.style.animationDuration = Math.max(0.45, 1.1 - count * 0.015) + "s";
 
-  /* no resolution — it just keeps going at full intensity */
+  /* audio layers start and swell with the escalation */
+  updateAudio();
+
+  /* no resolution — climax() takes over at CLIMAX_AT */
   interval = Math.max(MIN_INTERVAL, interval * ACCEL);
   setTimeout(tick, interval);
+}
+
+/* ---- at 20s: every message on screen becomes GET OUT / GO HOME ---- */
+function climax() {
+  climaxed = true;
+
+  /* rewrite every popup already on screen */
+  document.querySelectorAll(".popup p").forEach(p => {
+    p.textContent = CLIMAX_WORDS[Math.floor(Math.random() * CLIMAX_WORDS.length)];
+    p.closest(".popup").classList.add("urgent");
+  });
+  document.querySelectorAll(".intrusive").forEach(el => {
+    el.textContent = CLIMAX_WORDS[Math.floor(Math.random() * CLIMAX_WORDS.length)];
+  });
+
+  /* crescendo: max spawn rate, full shake, audio slammed to ceiling */
+  interval = MIN_INTERVAL * 0.6;
+  if (!reducedMotion) document.body.classList.add("shaking");
+  AUDIO_TRACKS.forEach(t => {
+    if (!t.playing && audioUnlocked) t.el.play().then(() => { t.playing = true; }).catch(() => {});
+    t.el.volume = t.maxVolume;
+  });
+
+  setTimeout(crash, CRASH_AFTER);
+}
+
+/* ---- the "crash": hard cut, fake error, then back to Twine ---- */
+function crash() {
+  crashed = true;
+  /* silence everything instantly */
+  AUDIO_TRACKS.forEach(t => { t.el.pause(); });
+  document.body.classList.remove("shaking");
+
+  /* hard cut to black with a fake fatal error */
+  document.body.innerHTML = `
+    <div style="position:fixed;inset:0;background:#000;color:#888;
+                font-family:'Courier New',monospace;font-size:13px;
+                display:flex;align-items:center;justify-content:center;">
+      <span>fatal error 0x000F — session terminated_</span>
+    </div>`;
+
+  setTimeout(() => {
+    window.close();                       /* works if Twine opened this tab */
+    window.location.href = RETURN_URL;    /* fallback: redirect to Twine */
+  }, 1500);
 }
 
 /* launch immediately on load — no intro, no gate */
 window.addEventListener("load", () => {
   document.getElementById("spiral-video").play().catch(() => {});
+  startAudio();   /* will succeed or silently wait for first interaction */
   if (reducedMotion) { interval = 2600; } /* gentler pacing if requested by OS */
   tick();
+  setTimeout(climax, CLIMAX_AT);
 });
 </script>
 </body>
